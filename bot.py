@@ -1,6 +1,9 @@
 import os
 import re
+import json
 import shutil
+from datetime import datetime
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,6 +18,11 @@ from docx import Document
 from docx.shared import Inches
 
 TOKEN ="8290808043:AAEWX_oDghVc0teDOgJbYVNjnnLXqXdCYmg"
+
+# O'Z TELEGRAM ID INGNI YOZ
+ADMIN_ID = 7013209195
+
+DATA_FILE = "stats.json"
 
 user_images = {}
 user_languages = {}
@@ -53,6 +61,18 @@ texts = {
         "name_saved_word": "✅ Nomi saqlandi. Word tayyorlayapman...",
         "name_too_long": "❌ Nomi juda uzun. Qisqaroq nom yuboring.",
         "name_empty": "❌ To‘g‘ri nom yuboring.",
+        "error_general": "❌ Xatolik yuz berdi. Qaytadan urinib ko‘ring.",
+        "error_format": "❌ Noto‘g‘ri fayl formati.",
+        "error_admin": "⛔ Siz admin emassiz.",
+        "stats_title": "📊 Bot statistikasi",
+        "users_total": "👥 Jami foydalanuvchilar: {value}",
+        "users_today": "📅 Bugungi foydalanuvchilar: {value}",
+        "users_month": "🗓 Oylik foydalanuvchilar: {value}",
+        "pdf_total": "📄 PDF qilinganlar: {value}",
+        "word_total": "📝 Word qilinganlar: {value}",
+        "photos_total": "🖼 Qabul qilingan rasmlar: {value}",
+        "admin_help": "Admin buyruqlari:\n/admin\n/stats\n/myid",
+        "progress_done": "✅ Tayyor bo‘ldi.",
     },
     "ru": {
         "choose_lang": "Выберите язык / Choose language / Tilni tanlang 👇",
@@ -84,6 +104,18 @@ texts = {
         "name_saved_word": "✅ Имя сохранено. Создаю Word...",
         "name_too_long": "❌ Имя слишком длинное. Отправьте короче.",
         "name_empty": "❌ Отправьте правильное имя.",
+        "error_general": "❌ Произошла ошибка. Попробуйте снова.",
+        "error_format": "❌ Неверный формат файла.",
+        "error_admin": "⛔ Вы не админ.",
+        "stats_title": "📊 Статистика бота",
+        "users_total": "👥 Всего пользователей: {value}",
+        "users_today": "📅 Пользователи сегодня: {value}",
+        "users_month": "🗓 Пользователи за месяц: {value}",
+        "pdf_total": "📄 PDF создано: {value}",
+        "word_total": "📝 Word создано: {value}",
+        "photos_total": "🖼 Получено фото: {value}",
+        "admin_help": "Команды админа:\n/admin\n/stats\n/myid",
+        "progress_done": "✅ Готово.",
     },
     "en": {
         "choose_lang": "Choose language / Tilni tanlang / Выберите язык 👇",
@@ -115,8 +147,93 @@ texts = {
         "name_saved_word": "✅ Name saved. Creating Word...",
         "name_too_long": "❌ Name is too long. Send a shorter one.",
         "name_empty": "❌ Send a valid file name.",
+        "error_general": "❌ An error occurred. Please try again.",
+        "error_format": "❌ Invalid file format.",
+        "error_admin": "⛔ You are not admin.",
+        "stats_title": "📊 Bot statistics",
+        "users_total": "👥 Total users: {value}",
+        "users_today": "📅 Today's users: {value}",
+        "users_month": "🗓 Monthly users: {value}",
+        "pdf_total": "📄 PDFs created: {value}",
+        "word_total": "📝 Word files created: {value}",
+        "photos_total": "🖼 Photos received: {value}",
+        "admin_help": "Admin commands:\n/admin\n/stats\n/myid",
+        "progress_done": "✅ Done.",
     }
 }
+
+
+def load_stats():
+    if not os.path.exists(DATA_FILE):
+        return {
+            "users": {},
+            "totals": {
+                "pdf_count": 0,
+                "word_count": 0,
+                "photo_count": 0
+            }
+        }
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_stats(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+stats_data = load_stats()
+
+
+def ensure_user_exists(user_id: int):
+    uid = str(user_id)
+    if uid not in stats_data["users"]:
+        stats_data["users"][uid] = {
+            "first_seen": datetime.now().strftime("%Y-%m-%d"),
+            "last_seen": datetime.now().strftime("%Y-%m-%d"),
+            "daily_visits": [],
+            "monthly_visits": []
+        }
+
+
+def track_user(user_id: int):
+    today = datetime.now().strftime("%Y-%m-%d")
+    month = datetime.now().strftime("%Y-%m")
+
+    ensure_user_exists(user_id)
+    uid = str(user_id)
+
+    stats_data["users"][uid]["last_seen"] = today
+
+    if today not in stats_data["users"][uid]["daily_visits"]:
+        stats_data["users"][uid]["daily_visits"].append(today)
+
+    if month not in stats_data["users"][uid]["monthly_visits"]:
+        stats_data["users"][uid]["monthly_visits"].append(month)
+
+    save_stats(stats_data)
+
+
+def get_total_users():
+    return len(stats_data["users"])
+
+
+def get_today_users():
+    today = datetime.now().strftime("%Y-%m-%d")
+    count = 0
+    for user in stats_data["users"].values():
+        if today in user.get("daily_visits", []):
+            count += 1
+    return count
+
+
+def get_month_users():
+    month = datetime.now().strftime("%Y-%m")
+    count = 0
+    for user in stats_data["users"].values():
+        if month in user.get("monthly_visits", []):
+            count += 1
+    return count
 
 
 def get_user_folder(user_id: int) -> str:
@@ -158,16 +275,12 @@ def get_main_menu(lang: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(texts[lang]["pdf_btn"], callback_data="make_pdf"),
             InlineKeyboardButton(texts[lang]["word_btn"], callback_data="make_word"),
         ],
-        [
-            InlineKeyboardButton(texts[lang]["size_btn"], callback_data="choose_size"),
-        ],
+        [InlineKeyboardButton(texts[lang]["size_btn"], callback_data="choose_size")],
         [
             InlineKeyboardButton(texts[lang]["help_btn"], callback_data="help"),
             InlineKeyboardButton(texts[lang]["lang_btn"], callback_data="change_lang"),
         ],
-        [
-            InlineKeyboardButton(texts[lang]["clear_btn"], callback_data="clear_files"),
-        ],
+        [InlineKeyboardButton(texts[lang]["clear_btn"], callback_data="clear_files")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -191,9 +304,7 @@ def get_size_menu(lang: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton(texts[lang]["size_5"], callback_data="size_5"),
             InlineKeyboardButton(texts[lang]["size_original"], callback_data="size_org"),
         ],
-        [
-            InlineKeyboardButton("⬅️ Back", callback_data="back_main"),
-        ],
+        [InlineKeyboardButton("⬅️ Back", callback_data="back_main")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -225,103 +336,176 @@ def prepare_images_for_pdf(user_id: int, size_choice: str):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        texts["uz"]["choose_lang"],
-        reply_markup=get_language_menu()
-    )
+    if update.message:
+        track_user(update.message.from_user.id)
+        await update.message.reply_text(
+            texts["uz"]["choose_lang"],
+            reply_markup=get_language_menu()
+        )
 
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.photo:
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message:
+        await update.message.reply_text(f"Sizning ID: {update.message.from_user.id}")
+
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
         return
 
     user_id = update.message.from_user.id
     lang = get_user_language(user_id)
-    folder = get_user_folder(user_id)
 
-    if user_id not in user_images:
-        user_images[user_id] = []
+    if user_id != ADMIN_ID:
+        await update.message.reply_text(texts[lang]["error_admin"])
+        return
 
-    photo = update.message.photo[-1]
-    tg_file = await context.bot.get_file(photo.file_id)
+    await send_stats(update.message, lang)
 
-    file_path = os.path.join(folder, f"{photo.file_id}.jpg")
-    await tg_file.download_to_drive(file_path)
 
-    user_images[user_id].append(file_path)
-    count = len(user_images[user_id])
-
-    await update.message.reply_text(
-        texts[lang]["photo_saved"].format(count=count),
-        reply_markup=get_main_menu(lang)
+async def send_stats(message, lang: str):
+    text = (
+        f"{texts[lang]['stats_title']}\n\n"
+        f"{texts[lang]['users_total'].format(value=get_total_users())}\n"
+        f"{texts[lang]['users_today'].format(value=get_today_users())}\n"
+        f"{texts[lang]['users_month'].format(value=get_month_users())}\n"
+        f"{texts[lang]['pdf_total'].format(value=stats_data['totals']['pdf_count'])}\n"
+        f"{texts[lang]['word_total'].format(value=stats_data['totals']['word_count'])}\n"
+        f"{texts[lang]['photos_total'].format(value=stats_data['totals']['photo_count'])}"
     )
+    await message.reply_text(text)
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+
+    user_id = update.message.from_user.id
+    lang = get_user_language(user_id)
+
+    if user_id != ADMIN_ID:
+        await update.message.reply_text(texts[lang]["error_admin"])
+        return
+
+    await send_stats(update.message, lang)
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if not update.message or not update.message.photo:
+            return
+
+        user_id = update.message.from_user.id
+        track_user(user_id)
+        lang = get_user_language(user_id)
+        folder = get_user_folder(user_id)
+
+        if user_id not in user_images:
+            user_images[user_id] = []
+
+        photo = update.message.photo[-1]
+        tg_file = await context.bot.get_file(photo.file_id)
+
+        file_path = os.path.join(folder, f"{photo.file_id}.jpg")
+        await tg_file.download_to_drive(file_path)
+
+        user_images[user_id].append(file_path)
+        stats_data["totals"]["photo_count"] += 1
+        save_stats(stats_data)
+
+        count = len(user_images[user_id])
+
+        await update.message.reply_text(
+            texts[lang]["photo_saved"].format(count=count),
+            reply_markup=get_main_menu(lang)
+        )
+    except Exception:
+        await update.message.reply_text(texts[get_user_language(update.message.from_user.id)]["error_general"])
 
 
 async def make_pdf(query, user_id: int, file_name: str):
     lang = get_user_language(user_id)
 
-    if user_id not in user_images or len(user_images[user_id]) == 0:
-        await query.message.reply_text(texts[lang]["no_images"])
-        return
+    try:
+        if user_id not in user_images or len(user_images[user_id]) == 0:
+            await query.message.reply_text(texts[lang]["no_images"])
+            return
 
-    loading_msg = await query.message.reply_text(texts[lang]["loading_pdf"])
+        loading_msg = await query.message.reply_text(texts[lang]["loading_pdf"])
 
-    size_choice = user_pdf_sizes.get(user_id, "org")
-    cleanup_temp_folder(user_id)
-    image_paths = prepare_images_for_pdf(user_id, size_choice)
+        size_choice = user_pdf_sizes.get(user_id, "org")
+        cleanup_temp_folder(user_id)
+        image_paths = prepare_images_for_pdf(user_id, size_choice)
 
-    images = []
-    for path in image_paths:
-        img = Image.open(path).convert("RGB")
-        images.append(img)
+        images = []
+        for path in image_paths:
+            img = Image.open(path).convert("RGB")
+            images.append(img)
 
-    folder = get_user_folder(user_id)
-    pdf_path = os.path.join(folder, f"{file_name}.pdf")
+        folder = get_user_folder(user_id)
+        pdf_path = os.path.join(folder, f"{file_name}.pdf")
 
-    images[0].save(pdf_path, save_all=True, append_images=images[1:])
+        images[0].save(pdf_path, save_all=True, append_images=images[1:])
 
-    for img in images:
-        img.close()
+        for img in images:
+            img.close()
 
-    with open(pdf_path, "rb") as f:
-        await query.message.reply_document(
-            document=f,
-            filename=f"{file_name}.pdf",
-            caption=texts[lang]["pdf_ready"]
-        )
+        stats_data["totals"]["pdf_count"] += 1
+        save_stats(stats_data)
 
-    cleanup_temp_folder(user_id)
-    await loading_msg.delete()
+        await loading_msg.edit_text(f"{texts[lang]['loading_pdf']}\n\n✅ 100%")
+
+        with open(pdf_path, "rb") as f:
+            await query.message.reply_document(
+                document=f,
+                filename=f"{file_name}.pdf",
+                caption=texts[lang]["pdf_ready"]
+            )
+
+        cleanup_temp_folder(user_id)
+        await loading_msg.delete()
+
+    except Exception:
+        await query.message.reply_text(texts[lang]["error_general"])
 
 
 async def make_word(query, user_id: int, file_name: str):
     lang = get_user_language(user_id)
 
-    if user_id not in user_images or len(user_images[user_id]) == 0:
-        await query.message.reply_text(texts[lang]["no_images"])
-        return
+    try:
+        if user_id not in user_images or len(user_images[user_id]) == 0:
+            await query.message.reply_text(texts[lang]["no_images"])
+            return
 
-    loading_msg = await query.message.reply_text(texts[lang]["loading_word"])
+        loading_msg = await query.message.reply_text(texts[lang]["loading_word"])
 
-    folder = get_user_folder(user_id)
-    doc_path = os.path.join(folder, f"{file_name}.docx")
+        folder = get_user_folder(user_id)
+        doc_path = os.path.join(folder, f"{file_name}.docx")
 
-    doc = Document()
+        doc = Document()
 
-    for path in user_images[user_id]:
-        doc.add_picture(path, width=Inches(5.5))
-        doc.add_paragraph("")
+        for path in user_images[user_id]:
+            doc.add_picture(path, width=Inches(5.5))
+            doc.add_paragraph("")
 
-    doc.save(doc_path)
+        doc.save(doc_path)
 
-    with open(doc_path, "rb") as f:
-        await query.message.reply_document(
-            document=f,
-            filename=f"{file_name}.docx",
-            caption=texts[lang]["word_ready"]
-        )
+        stats_data["totals"]["word_count"] += 1
+        save_stats(stats_data)
 
-    await loading_msg.delete()
+        await loading_msg.edit_text(f"{texts[lang]['loading_word']}\n\n✅ 100%")
+
+        with open(doc_path, "rb") as f:
+            await query.message.reply_document(
+                document=f,
+                filename=f"{file_name}.docx",
+                caption=texts[lang]["word_ready"]
+            )
+
+        await loading_msg.delete()
+
+    except Exception:
+        await query.message.reply_text(texts[lang]["error_general"])
 
 
 async def clear_files(query, user_id: int):
@@ -349,6 +533,7 @@ async def handle_filename_input(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     user_id = update.message.from_user.id
+    track_user(user_id)
     lang = get_user_language(user_id)
 
     if user_id not in user_waiting_for_name:
@@ -389,6 +574,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = query.from_user.id
+    track_user(user_id)
     action = query.data
 
     if action.startswith("lang_"):
@@ -403,63 +589,72 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = get_user_language(user_id)
 
-    if action == "make_pdf":
-        if user_id not in user_images or len(user_images[user_id]) == 0:
-            await query.message.reply_text(texts[lang]["no_images"])
-            return
+    try:
+        if action == "make_pdf":
+            if user_id not in user_images or len(user_images[user_id]) == 0:
+                await query.message.reply_text(texts[lang]["no_images"])
+                return
 
-        user_waiting_for_name[user_id] = "pdf"
-        await query.message.reply_text(texts[lang]["ask_name_pdf"])
+            user_waiting_for_name[user_id] = "pdf"
+            await query.message.reply_text(texts[lang]["ask_name_pdf"])
 
-    elif action == "make_word":
-        if user_id not in user_images or len(user_images[user_id]) == 0:
-            await query.message.reply_text(texts[lang]["no_images"])
-            return
+        elif action == "make_word":
+            if user_id not in user_images or len(user_images[user_id]) == 0:
+                await query.message.reply_text(texts[lang]["no_images"])
+                return
 
-        user_waiting_for_name[user_id] = "word"
-        await query.message.reply_text(texts[lang]["ask_name_word"])
+            user_waiting_for_name[user_id] = "word"
+            await query.message.reply_text(texts[lang]["ask_name_word"])
 
-    elif action == "clear_files":
-        await clear_files(query, user_id)
+        elif action == "clear_files":
+            await clear_files(query, user_id)
 
-    elif action == "help":
-        await query.message.reply_text(
-            texts[lang]["help"],
-            reply_markup=get_main_menu(lang)
-        )
+        elif action == "help":
+            await query.message.reply_text(
+                texts[lang]["help"],
+                reply_markup=get_main_menu(lang)
+            )
 
-    elif action == "change_lang":
-        await query.message.reply_text(
-            texts[lang]["choose_lang"],
-            reply_markup=get_language_menu()
-        )
+        elif action == "change_lang":
+            await query.message.reply_text(
+                texts[lang]["choose_lang"],
+                reply_markup=get_language_menu()
+            )
 
-    elif action == "choose_size":
-        await query.message.reply_text(
-            texts[lang]["choose_size"],
-            reply_markup=get_size_menu(lang)
-        )
+        elif action == "choose_size":
+            await query.message.reply_text(
+                texts[lang]["choose_size"],
+                reply_markup=get_size_menu(lang)
+            )
 
-    elif action.startswith("size_"):
-        size_choice = action.split("_")[1]
-        user_pdf_sizes[user_id] = size_choice
+        elif action.startswith("size_"):
+            size_choice = action.split("_")[1]
+            user_pdf_sizes[user_id] = size_choice
 
-        await query.message.reply_text(
-            texts[lang]["size_saved"],
-            reply_markup=get_main_menu(lang)
-        )
+            await query.message.reply_text(
+                texts[lang]["size_saved"],
+                reply_markup=get_main_menu(lang)
+            )
 
-    elif action == "back_main":
-        await query.message.reply_text(
-            texts[lang]["send_photo"],
-            reply_markup=get_main_menu(lang)
-        )
+        elif action == "back_main":
+            await query.message.reply_text(
+                texts[lang]["send_photo"],
+                reply_markup=get_main_menu(lang)
+            )
+    except Exception:
+        await query.message.reply_text(texts[lang]["error_general"])
 
 
 def main():
+    if not TOKEN:
+        raise ValueError("TOKEN topilmadi")
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("admin", admin_panel))
+    app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_filename_input))
