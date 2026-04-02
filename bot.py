@@ -14,7 +14,7 @@ from PIL import Image
 from docx import Document
 from docx.shared import Inches
 
-TOKEN = os.getenv("8290808043:AAEWX_oDghVc0teDOgJbYVNjnnLXqXdCYmg")
+TOKEN ="8290808043:AAEWX_oDghVc0teDOgJbYVNjnnLXqXdCYmg"
 
 user_images = {}
 user_languages = {}
