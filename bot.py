@@ -6,7 +6,12 @@ import requests
 from datetime import datetime
 from typing import Optional
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+)
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -53,7 +58,7 @@ TXT = {
         "• rasmlarni PDF/Word ga aylantiraman\n"
         "• matnni chiroyli Word/PDF qilaman\n"
         "• AI orqali matn yozib beraman\n\n"
-        "Kerakli tugmani tanlang 👇"
+        "Pastdagi menyudan kerakli bo‘limni tanlang 👇"
     ),
     "photo_saved": "✅ {count} ta rasm saqlandi.",
     "no_images": "❌ Avval rasm yuboring.",
@@ -72,7 +77,6 @@ TXT = {
     "loading_ai": "🤖 AI ishlayapti...",
     "done_pdf": "✅ PDF tayyor.",
     "done_word": "✅ Word tayyor.",
-    "done_ai": "✅ AI javobi tayyor.",
     "invalid_name": "❌ Fayl nomi noto‘g‘ri.",
     "long_name": "❌ Fayl nomi juda uzun.",
     "help": (
@@ -336,29 +340,18 @@ def create_pdf_from_text(file_path: str, title: str, content: str):
 # =========================
 # MENYULAR
 # =========================
-def get_main_menu(user_id: int):
+def get_reply_menu(user_id: int):
     keyboard = [
-        [
-            InlineKeyboardButton("📄 PDF qilish", callback_data="img_to_pdf"),
-            InlineKeyboardButton("📝 Word qilish", callback_data="img_to_word"),
-        ],
-        [
-            InlineKeyboardButton("📉 PDF hajmi", callback_data="choose_size"),
-            InlineKeyboardButton("🧹 Tozalash", callback_data="clear_files"),
-        ],
-        [
-            InlineKeyboardButton("🤖 AI panel", callback_data="ai_panel"),
-            InlineKeyboardButton("📝 Matndan fayl", callback_data="text_panel"),
-        ],
-        [
-            InlineKeyboardButton("🆘 Yordam", callback_data="help_contact"),
-        ],
+        ["📷 Rasm yuborish", "📄 PDF qilish"],
+        ["📝 Word qilish", "📉 PDF hajmi"],
+        ["🤖 AI panel", "📝 Matndan fayl"],
+        ["🧹 Tozalash", "🆘 Yordam"],
     ]
 
     if user_id == ADMIN_ID:
-        keyboard.append([InlineKeyboardButton("👑 Admin panel", callback_data="admin_panel")])
+        keyboard.append(["👑 Admin panel"])
 
-    return InlineKeyboardMarkup(keyboard)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
 def get_pdf_size_menu():
@@ -371,9 +364,7 @@ def get_pdf_size_menu():
             InlineKeyboardButton("5 MB", callback_data="size_5"),
             InlineKeyboardButton("Original", callback_data="size_org"),
         ],
-        [
-            InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main"),
-        ],
+        [InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -385,9 +376,7 @@ def get_ai_menu():
             InlineKeyboardButton("🤖 AI → PDF", callback_data="ai_to_pdf"),
             InlineKeyboardButton("🤖 AI → Word", callback_data="ai_to_word"),
         ],
-        [
-            InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main"),
-        ],
+        [InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -398,9 +387,7 @@ def get_text_menu():
             InlineKeyboardButton("📄 Matndan PDF", callback_data="text_to_pdf"),
             InlineKeyboardButton("📝 Matndan Word", callback_data="text_to_word"),
         ],
-        [
-            InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main"),
-        ],
+        [InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -419,9 +406,7 @@ def get_admin_menu():
             InlineKeyboardButton("🧹 Tozalash", callback_data="admin_clear_server"),
             InlineKeyboardButton("🆔 Mening ID", callback_data="admin_myid"),
         ],
-        [
-            InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main"),
-        ],
+        [InlineKeyboardButton("⬅️ Orqaga", callback_data="back_main")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -434,7 +419,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_id = update.message.from_user.id
     track_user(user_id)
-    await update.message.reply_text(TXT["welcome"], reply_markup=get_main_menu(user_id))
+    await update.message.reply_text(TXT["welcome"], reply_markup=get_reply_menu(user_id))
 
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -507,7 +492,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await loading.edit_text(
             TXT["photo_saved"].format(count=len(user_images[user_id])),
-            reply_markup=get_main_menu(user_id),
+            reply_markup=get_reply_menu(user_id),
         )
     except Exception:
         if update.message:
@@ -659,7 +644,7 @@ async def export_text_to_word(message, user_id: int, text_content: str, title="M
 
 
 # =========================
-# MATN HANDLER
+# ODDIY MATN HANDLER
 # =========================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -667,13 +652,73 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.message.from_user.id
     track_user(user_id)
-    mode = user_states.get(user_id)
     text_value = update.message.text.strip()
+    mode = user_states.get(user_id)
 
+    # Reply keyboard tugmalari
     if not mode:
-        await update.message.reply_text("Kerakli tugmani tanlang 👇", reply_markup=get_main_menu(user_id))
+        if text_value == "📷 Rasm yuborish":
+            await update.message.reply_text("📷 Endi rasm yuboring.", reply_markup=get_reply_menu(user_id))
+            return
+
+        if text_value == "📄 PDF qilish":
+            if user_id not in user_images or not user_images[user_id]:
+                await update.message.reply_text(TXT["no_images"], reply_markup=get_reply_menu(user_id))
+                return
+            user_states[user_id] = "await_img_pdf_name"
+            await update.message.reply_text(TXT["ask_filename_pdf"])
+            return
+
+        if text_value == "📝 Word qilish":
+            if user_id not in user_images or not user_images[user_id]:
+                await update.message.reply_text(TXT["no_images"], reply_markup=get_reply_menu(user_id))
+                return
+            user_states[user_id] = "await_img_word_name"
+            await update.message.reply_text(TXT["ask_filename_word"])
+            return
+
+        if text_value == "📉 PDF hajmi":
+            await update.message.reply_text("PDF hajmini tanlang 👇", reply_markup=get_pdf_size_menu())
+            return
+
+        if text_value == "🤖 AI panel":
+            await update.message.reply_text("🤖 AI panel", reply_markup=get_ai_menu())
+            return
+
+        if text_value == "📝 Matndan fayl":
+            await update.message.reply_text("📝 Matndan fayl paneli", reply_markup=get_text_menu())
+            return
+
+        if text_value == "🧹 Tozalash":
+            user_images[user_id] = []
+            user_states.pop(user_id, None)
+            cleanup_temp_folder(user_id)
+
+            folder = get_user_folder(user_id)
+            if os.path.exists(folder):
+                for file_name in os.listdir(folder):
+                    file_path = os.path.join(folder, file_name)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+
+            await update.message.reply_text(TXT["cleared"], reply_markup=get_reply_menu(user_id))
+            return
+
+        if text_value == "🆘 Yordam":
+            await update.message.reply_text(TXT["help"], reply_markup=get_reply_menu(user_id))
+            return
+
+        if text_value == "👑 Admin panel":
+            if user_id != ADMIN_ID:
+                await update.message.reply_text(TXT["not_admin"], reply_markup=get_reply_menu(user_id))
+                return
+            await update.message.reply_text(TXT["admin_title"], reply_markup=get_admin_menu())
+            return
+
+        await update.message.reply_text("Kerakli tugmani tanlang 👇", reply_markup=get_reply_menu(user_id))
         return
 
+    # Holatlar
     if mode == "await_img_pdf_name":
         clean_name = sanitize_filename(text_value)
         if not clean_name:
@@ -716,7 +761,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states.pop(user_id, None)
 
         if not ai_ready():
-            await update.message.reply_text(TXT["ai_not_configured"], reply_markup=get_main_menu(user_id))
+            await update.message.reply_text(TXT["ai_not_configured"], reply_markup=get_reply_menu(user_id))
             return
 
         try:
@@ -738,7 +783,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states.pop(user_id, None)
 
         if not ai_ready():
-            await update.message.reply_text(TXT["ai_not_configured"], reply_markup=get_main_menu(user_id))
+            await update.message.reply_text(TXT["ai_not_configured"], reply_markup=get_reply_menu(user_id))
             return
 
         try:
@@ -761,7 +806,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states.pop(user_id, None)
 
         if not ai_ready():
-            await update.message.reply_text(TXT["ai_not_configured"], reply_markup=get_main_menu(user_id))
+            await update.message.reply_text(TXT["ai_not_configured"], reply_markup=get_reply_menu(user_id))
             return
 
         try:
@@ -780,11 +825,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(TXT["general_error"])
         return
 
-    await update.message.reply_text("Kerakli tugmani tanlang 👇", reply_markup=get_main_menu(user_id))
-
 
 # =========================
-# TUGMALAR
+# INLINE TUGMALAR
 # =========================
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -795,52 +838,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action = query.data
 
     try:
-        if action == "img_to_pdf":
-            if user_id not in user_images or not user_images[user_id]:
-                await query.message.reply_text(TXT["no_images"])
-                return
-            user_states[user_id] = "await_img_pdf_name"
-            await query.message.reply_text(TXT["ask_filename_pdf"])
-            return
-
-        if action == "img_to_word":
-            if user_id not in user_images or not user_images[user_id]:
-                await query.message.reply_text(TXT["no_images"])
-                return
-            user_states[user_id] = "await_img_word_name"
-            await query.message.reply_text(TXT["ask_filename_word"])
-            return
-
-        if action == "choose_size":
-            await query.message.reply_text("PDF hajmini tanlang 👇", reply_markup=get_pdf_size_menu())
-            return
-
         if action.startswith("size_"):
             user_pdf_sizes[user_id] = action.split("_")[1]
-            await query.message.reply_text(TXT["pdf_size_saved"], reply_markup=get_main_menu(user_id))
-            return
-
-        if action == "clear_files":
-            user_images[user_id] = []
-            user_states.pop(user_id, None)
-            cleanup_temp_folder(user_id)
-
-            folder = get_user_folder(user_id)
-            if os.path.exists(folder):
-                for file_name in os.listdir(folder):
-                    file_path = os.path.join(folder, file_name)
-                    if os.path.isfile(file_path):
-                        os.remove(file_path)
-
-            await query.message.reply_text(TXT["cleared"], reply_markup=get_main_menu(user_id))
-            return
-
-        if action == "ai_panel":
-            await query.message.reply_text("🤖 AI panel", reply_markup=get_ai_menu())
-            return
-
-        if action == "text_panel":
-            await query.message.reply_text("📝 Matndan fayl paneli", reply_markup=get_text_menu())
+            await query.message.reply_text(TXT["pdf_size_saved"], reply_markup=get_reply_menu(user_id))
             return
 
         if action == "ai_text_only":
@@ -866,17 +866,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if action == "text_to_word":
             user_states[user_id] = "await_text_word"
             await query.message.reply_text(TXT["ask_text_word"])
-            return
-
-        if action == "help_contact":
-            await query.message.reply_text(TXT["help"], reply_markup=get_main_menu(user_id))
-            return
-
-        if action == "admin_panel":
-            if user_id != ADMIN_ID:
-                await query.message.reply_text(TXT["not_admin"])
-                return
-            await query.message.reply_text(TXT["admin_title"], reply_markup=get_admin_menu())
             return
 
         if action == "admin_stats":
@@ -943,11 +932,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if action == "back_main":
-            await query.message.reply_text("Asosiy menyu 👇", reply_markup=get_main_menu(user_id))
+            await query.message.reply_text("Asosiy menyu 👇", reply_markup=get_reply_menu(user_id))
             return
 
     except Exception:
-        await query.message.reply_text(TXT["general_error"], reply_markup=get_main_menu(user_id))
+        await query.message.reply_text(TXT["general_error"], reply_markup=get_reply_menu(user_id))
 
 
 # =========================
